@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Map</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <style>
+      #map {
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <output></output>
+    <div>
+      <label for="msg">Message:</label>
+      <input type="text" id="msg" maxlength="225" />
+      <button>Send Message</button>
+    </div>
+  </body>
+  <script src="/socket.io/socket.io.js"></script>
+</html>
+
+<script>
+  var socket = io();
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function (position) {
+      let latitude = position.coords.latitude;
+      let longitude = position.coords.longitude;
+      const markers = {};
+      socket.emit("user_coords", { latitude, longitude });
+      socket.on("user_coords_broadcast", (data) => {
+        const { latitude, longitude, id } = data;
+        if (markers[id]) {
+          markers[id].setLatLng([latitude, longitude]);
+        } else {
+          markers[id] = L.marker([latitude, longitude]).addTo(map);
+        }
+        console.log("user with ", data);
+      });
+      socket.on("user_disconnected", (data) => {
+        const { id } = data;
+        map.removeLayer(markers[id]);
+      });
+
+      console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
+
+      // Initialize the map after getting the coordinates
+      var map = L.map("map").setView([latitude, longitude], 13);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+
+      // Add a marker after getting the coordinates
+      var marker = L.marker([latitude, longitude]).addTo(map);
+    });
+  } else {
+    console.log("Geolocation is not supported by this browser.");
+  }
+
+  window.onload = function () {
+    var messages = [],
+      socket = io.connect(window.location.origin),
+      display = document.getElementsByTagName("output")[0],
+      button = document.getElementsByTagName("button")[0],
+      content = document.getElementById("msg");
+
+    socket.on("message", function (data) {
+      if (data.message) {
+        messages.push(data.message);
+        var html = "";
+        for (var i = 0; i < messages.length; i++) {
+          html += messages[i];
+        }
+        display.innerHTML = html;
+      } else {
+        console.log("There is a problem:", data);
+      }
+    });
+
+    button.onclick = function () {
+      socket.emit("receive", { message: content.value });
+    };
+  };
+</script>
